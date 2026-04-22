@@ -1,0 +1,18 @@
+{
+  "name": "ott-streaming-mvp",
+  "private": true,
+  "workspaces": [
+    "backend",
+    "worker",
+    "frontend"
+  ],
+  "scripts": {
+    "docker:up": "docker compose up -d",
+    "docker:down": "docker compose down -v",
+    "dev": "npm -w backend run dev & npm -w worker run dev & npm -w frontend run dev",
+    "lint": "npm -w backend run lint && npm -w worker run lint && npm -w frontend run lint"
+  },
+  "devDependencies": {
+    "@typescript-eslint/scope-manager": "^8.59.0"
+  }
+}
