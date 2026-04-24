@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import videojs from "video.js";
 import "video.js/dist/video-js.css";
 import { api } from "../api/client";
@@ -14,9 +14,11 @@ type Video = {
 };
 
 export function PlayerPage() {
+  const navigate = useNavigate();
   const { id } = useParams();
   const [video, setVideo] = useState<Video | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
   const videoEl = useRef<HTMLVideoElement | null>(null);
   const player = useRef<ReturnType<typeof videojs> | null>(null);
 
@@ -65,7 +67,29 @@ export function PlayerPage() {
   return (
     <div className="grid">
       <div className="card">
-        <h2>{video?.title ?? "Video"}</h2>
+        <div className="playerHeader">
+          <h2>{video?.title ?? "Video"}</h2>
+          <button
+            className="btn danger"
+            disabled={!video || deleting}
+            onClick={async () => {
+              if (!video) return;
+              if (!confirm(`Delete "${video.title}"? This cannot be undone.`)) return;
+              setDeleting(true);
+              setError(null);
+              try {
+                await api(`/videos/${video.id}`, { method: "DELETE" });
+                navigate("/videos");
+              } catch (e) {
+                setError(e instanceof Error ? e.message : "Delete failed");
+              } finally {
+                setDeleting(false);
+              }
+            }}
+          >
+            {deleting ? "Deleting..." : "Delete video"}
+          </button>
+        </div>
         {error ? <p className="error">{error}</p> : null}
 
         {video?.status !== "READY" ? (
@@ -77,7 +101,7 @@ export function PlayerPage() {
         ) : null}
 
         <div style={{ marginTop: 12 }}>
-          <video ref={videoEl} className="video-js vjs-big-play-centered" />
+          <video ref={videoEl} className="video-js vjs-big-play-centered coolPlayer" />
         </div>
 
         {src ? (

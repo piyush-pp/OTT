@@ -1,4 +1,4 @@
-import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
+import { DeleteObjectsCommand, ListObjectsV2Command, S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { env } from "../utils/env.js";
 
@@ -25,4 +25,34 @@ export async function presignPutObject(params: {
   });
   const url = await getSignedUrl(s3, cmd, { expiresIn: params.expiresInSeconds ?? 60 * 10 });
   return url;
+}
+
+export async function deleteByPrefix(params: { bucket: string; prefix: string }) {
+  let continuationToken: string | undefined;
+
+  do {
+    const list = await s3.send(
+      new ListObjectsV2Command({
+        Bucket: params.bucket,
+        Prefix: params.prefix,
+        ContinuationToken: continuationToken
+      })
+    );
+
+    const objects = (list.Contents ?? [])
+      .map((entry) => entry.Key)
+      .filter((key): key is string => Boolean(key))
+      .map((Key) => ({ Key }));
+
+    if (objects.length > 0) {
+      await s3.send(
+        new DeleteObjectsCommand({
+          Bucket: params.bucket,
+          Delete: { Objects: objects, Quiet: true }
+        })
+      );
+    }
+
+    continuationToken = list.IsTruncated ? list.NextContinuationToken : undefined;
+  } while (continuationToken);
 }

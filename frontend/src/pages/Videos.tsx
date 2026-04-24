@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { api } from "../api/client";
 
 type Video = {
@@ -14,8 +14,10 @@ type Video = {
 };
 
 export function VideosPage() {
+  const navigate = useNavigate();
   const [videos, setVideos] = useState<Video[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   async function refresh() {
     try {
@@ -50,17 +52,43 @@ export function VideosPage() {
 
         <div className="videos">
           {videos.map((v) => (
-            <Link key={v.id} to={`/videos/${v.id}`} className="card videoTile">
-              {v.thumbnailUrl ? <img className="thumb" src={v.thumbnailUrl} alt={v.title} /> : <div className="thumb" />}
+            <div key={v.id} className="card videoTile coolCard">
+              <Link to={`/videos/${v.id}`}>
+                {v.thumbnailUrl ? <img className="thumb" src={v.thumbnailUrl} alt={v.title} /> : <div className="thumb" />}
+              </Link>
               <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
                 <strong>{v.title}</strong>
-                <span className="muted">
+                <span className={`status ${v.status.toLowerCase()}`}>
                   {v.status}
                   {typeof v.progress === "number" ? ` • ${v.progress}%` : ""}
                 </span>
                 {v.status === "FAILED" && v.error ? <span className="error">{v.error}</span> : null}
               </div>
-            </Link>
+              <div className="tileActions">
+                <button className="btn" onClick={() => navigate(`/videos/${v.id}`)}>
+                  Open
+                </button>
+                <button
+                  className="btn danger"
+                  disabled={deletingId === v.id}
+                  onClick={async () => {
+                    if (!confirm(`Delete "${v.title}"? This cannot be undone.`)) return;
+                    setDeletingId(v.id);
+                    setError(null);
+                    try {
+                      await api(`/videos/${v.id}`, { method: "DELETE" });
+                      setVideos((prev) => prev.filter((item) => item.id !== v.id));
+                    } catch (e) {
+                      setError(e instanceof Error ? e.message : "Delete failed");
+                    } finally {
+                      setDeletingId(null);
+                    }
+                  }}
+                >
+                  {deletingId === v.id ? "Deleting..." : "Delete"}
+                </button>
+              </div>
+            </div>
           ))}
         </div>
       </div>

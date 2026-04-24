@@ -3,7 +3,7 @@ import path from "node:path";
 import { prisma } from "../db/prisma.js";
 import { env } from "../utils/env.js";
 import { HttpError } from "../utils/errors.js";
-import { presignPutObject } from "./s3.js";
+import { deleteByPrefix, presignPutObject } from "./s3.js";
 import { videoTranscodeQueue } from "../queue/videoQueue.js";
 
 function normalizeExtension(filename?: string) {
@@ -72,5 +72,18 @@ export const videosService = {
       ...video,
       playbackUrl: video.playbackUrl ?? (video.status === "READY" ? `${env.CDN_BASE_URL}/videos/${video.id}/hls/master.m3u8` : null)
     };
+  },
+
+  async remove(userId: string, id: string) {
+    const video = await prisma.video.findFirst({ where: { id, userId } });
+    if (!video) throw new HttpError(404, "Video not found");
+
+    await Promise.all([
+      deleteByPrefix({ bucket: env.S3_BUCKET, prefix: `videos/${id}/` }),
+      deleteByPrefix({ bucket: env.S3_BUCKET, prefix: `uploads/${id}/` })
+    ]);
+
+    await prisma.video.delete({ where: { id } });
+    return { success: true };
   }
 };
