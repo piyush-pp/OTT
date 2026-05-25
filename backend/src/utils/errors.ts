@@ -15,7 +15,14 @@ export function notFound(_req: Request, _res: Response, next: NextFunction) {
   next(new HttpError(404, "Not found"));
 }
 
-export function errorHandler(err: unknown, _req: Request, res: Response) {
+// Express only treats a handler as an error handler when it has 4 args.
+// Without _next, Express falls back to its default HTML error page.
+export function errorHandler(
+  err: unknown,
+  _req: Request,
+  res: Response,
+  _next: NextFunction
+) {
   const status = err instanceof HttpError ? err.status : 500;
   const message =
     err instanceof HttpError ? err.message : "Internal server error";

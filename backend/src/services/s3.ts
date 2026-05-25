@@ -1,5 +1,13 @@
-import { DeleteObjectsCommand, ListObjectsV2Command, S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
+import {
+  DeleteObjectsCommand,
+  GetObjectCommand,
+  HeadObjectCommand,
+  ListObjectsV2Command,
+  PutObjectCommand,
+  S3Client
+} from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
+import type { Readable } from "node:stream";
 import { env } from "../utils/env.js";
 
 export const s3 = new S3Client({
@@ -25,6 +33,46 @@ export async function presignPutObject(params: {
   });
   const url = await getSignedUrl(s3, cmd, { expiresIn: params.expiresInSeconds ?? 60 * 10 });
   return url;
+}
+
+export async function presignGetObject(params: {
+  bucket: string;
+  key: string;
+  expiresInSeconds?: number;
+}) {
+  const cmd = new GetObjectCommand({ Bucket: params.bucket, Key: params.key });
+  return getSignedUrl(s3, cmd, { expiresIn: params.expiresInSeconds ?? 3600 });
+}
+
+export async function getObjectAsText(params: { bucket: string; key: string }) {
+  const response = await s3.send(new GetObjectCommand({ Bucket: params.bucket, Key: params.key }));
+  return response.Body!.transformToString("utf8");
+}
+
+export async function getObjectStream(params: {
+  bucket: string;
+  key: string;
+  range?: string;
+}) {
+  const response = await s3.send(
+    new GetObjectCommand({
+      Bucket: params.bucket,
+      Key: params.key,
+      Range: params.range
+    })
+  );
+  return {
+    stream: response.Body as Readable,
+    contentType: response.ContentType,
+    contentLength: response.ContentLength,
+    contentRange: response.ContentRange,
+    acceptRanges: response.AcceptRanges,
+    statusCode: response.$metadata?.httpStatusCode
+  };
+}
+
+export async function headObject(params: { bucket: string; key: string }) {
+  return s3.send(new HeadObjectCommand({ Bucket: params.bucket, Key: params.key }));
 }
 
 export async function deleteByPrefix(params: { bucket: string; prefix: string }) {

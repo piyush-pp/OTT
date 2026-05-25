@@ -1,97 +1,169 @@
-import { useEffect, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { Upload as UploadIcon, UploadCloud } from "lucide-react";
+import { toast } from "sonner";
 import { api } from "../api/client";
+import { CardVideo, VideoCard, VideoCardSkeleton } from "../components/VideoCard";
+import { ContinueItem, ContinueWatchingCard } from "../components/ContinueWatchingCard";
 
-type Video = {
-  id: string;
-  title: string;
-  status: "UPLOADED" | "PROCESSING" | "READY" | "FAILED";
-  createdAt: string;
-  playbackUrl?: string | null;
-  thumbnailUrl?: string | null;
-  progress?: number;
-  error?: string | null;
+type ListResp = {
+  data: CardVideo[];
+  meta: { total: number; page: number; pageSize: number; hasMore: boolean };
 };
 
 export function VideosPage() {
   const navigate = useNavigate();
-  const [videos, setVideos] = useState<Video[]>([]);
-  const [error, setError] = useState<string | null>(null);
+  const [videos, setVideos] = useState<CardVideo[]>([]);
+  const [loading, setLoading] = useState(true);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [continueItems, setContinueItems] = useState<ContinueItem[]>([]);
 
-  async function refresh() {
+  async function refresh(initial = false) {
+    if (initial) setLoading(true);
     try {
-      setError(null);
-      const res = await api<{ videos: Video[] }>("/videos");
-      setVideos(res.videos);
+      const res = await api<ListResp>("/api/v1/videos?page=1&pageSize=100");
+      setVideos((prev) =>
+        res.data.map((newV) => {
+          const existing = prev.find((v) => v.id === newV.id);
+          return {
+            ...newV,
+            thumbnailUrl: existing?.thumbnailUrl ?? newV.thumbnailUrl
+          };
+        })
+      );
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Unknown error");
+      toast.error(e instanceof Error ? e.message : "Failed to load videos");
+    } finally {
+      if (initial) setLoading(false);
+    }
+  }
+
+  async function refreshContinue() {
+    try {
+      const res = await api<{ data: ContinueItem[] }>(
+        "/api/v1/me/history?continueWatching=true&page=1&pageSize=20"
+      );
+      setContinueItems(res.data);
+    } catch {
+      // non-fatal
     }
   }
 
   useEffect(() => {
-    refresh();
-    const t = setInterval(refresh, 5000);
+    refresh(true);
+    refreshContinue();
+    const t = setInterval(() => refresh(false), 5000);
     return () => clearInterval(t);
   }, []);
 
+  const stats = useMemo(() => {
+    return {
+      total: videos.length,
+      ready: videos.filter((v) => v.status === "READY").length,
+      processing: videos.filter((v) => v.status === "PROCESSING" || v.status === "UPLOADED")
+        .length,
+      failed: videos.filter((v) => v.status === "FAILED").length
+    };
+  }, [videos]);
+
+  async function handleDelete(id: string) {
+    const target = videos.find((v) => v.id === id);
+    if (!target) return;
+    if (!confirm(`Delete "${target.title}"? This cannot be undone.`)) return;
+
+    setDeletingId(id);
+    try {
+      await api(`/api/v1/videos/${id}`, { method: "DELETE" });
+      setVideos((prev) => prev.filter((v) => v.id !== id));
+      toast.success("Video deleted");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Delete failed");
+    } finally {
+      setDeletingId(null);
+    }
+  }
+
   return (
-    <div className="grid">
-      <div className="card">
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
-          <div>
-            <h2>Videos</h2>
-            <p className="muted">Auto-refreshes every 5 seconds while transcodes run.</p>
+    <div className="page">
+      {continueItems.length > 0 && (
+        <div className="cw-section">
+          <div className="cw-section-header">
+            <div className="cw-section-title">Continue Watching</div>
           </div>
-          <button className="btn" onClick={refresh}>
-            Refresh
-          </button>
+          <div className="cw-row">
+            {continueItems.map((c) => (
+              <ContinueWatchingCard key={c.video.id} item={c} />
+            ))}
+          </div>
         </div>
+      )}
 
-        {error ? <p className="error">{error}</p> : null}
+      <div className="page-header">
+        <div className="page-title-block">
+          <h1>My Library</h1>
+          <p className="page-title-sub">Videos you've uploaded.</p>
+        </div>
+        <button
+          className="btn btn-primary"
+          onClick={() => navigate("/upload")}
+        >
+          <UploadIcon size={14} />
+          Upload Video
+        </button>
+      </div>
 
-        <div className="videos">
-          {videos.map((v) => (
-            <div key={v.id} className="card videoTile coolCard">
-              <Link to={`/videos/${v.id}`}>
-                {v.thumbnailUrl ? <img className="thumb" src={v.thumbnailUrl} alt={v.title} /> : <div className="thumb" />}
-              </Link>
-              <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                <strong>{v.title}</strong>
-                <span className={`status ${v.status.toLowerCase()}`}>
-                  {v.status}
-                  {typeof v.progress === "number" ? ` • ${v.progress}%` : ""}
-                </span>
-                {v.status === "FAILED" && v.error ? <span className="error">{v.error}</span> : null}
-              </div>
-              <div className="tileActions">
-                <button className="btn" onClick={() => navigate(`/videos/${v.id}`)}>
-                  Open
-                </button>
-                <button
-                  className="btn danger"
-                  disabled={deletingId === v.id}
-                  onClick={async () => {
-                    if (!confirm(`Delete "${v.title}"? This cannot be undone.`)) return;
-                    setDeletingId(v.id);
-                    setError(null);
-                    try {
-                      await api(`/videos/${v.id}`, { method: "DELETE" });
-                      setVideos((prev) => prev.filter((item) => item.id !== v.id));
-                    } catch (e) {
-                      setError(e instanceof Error ? e.message : "Delete failed");
-                    } finally {
-                      setDeletingId(null);
-                    }
-                  }}
-                >
-                  {deletingId === v.id ? "Deleting..." : "Delete"}
-                </button>
-              </div>
-            </div>
-          ))}
+      <div className="stats-row">
+        <div className="stat-card">
+          <div className="stat-label">Total</div>
+          <div className="stat-value">{stats.total}</div>
+        </div>
+        <div className="stat-card">
+          <div className="stat-label">Ready</div>
+          <div className="stat-value">{stats.ready}</div>
+        </div>
+        <div className="stat-card">
+          <div className="stat-label">Processing</div>
+          <div className="stat-value">{stats.processing}</div>
+        </div>
+        <div className="stat-card">
+          <div className="stat-label">Failed</div>
+          <div className="stat-value">{stats.failed}</div>
         </div>
       </div>
+
+      {loading ? (
+        <div className="video-grid">
+          {Array.from({ length: 8 }).map((_, i) => (
+            <VideoCardSkeleton key={i} />
+          ))}
+        </div>
+      ) : videos.length === 0 ? (
+        <div className="empty-state">
+          <div className="empty-state-icon">
+            <UploadCloud size={24} />
+          </div>
+          <div className="empty-state-title">No videos yet</div>
+          <p className="empty-state-sub">
+            Upload your first video to get started. We'll transcode it for streaming automatically.
+          </p>
+          <button className="btn btn-primary" onClick={() => navigate("/upload")}>
+            <UploadIcon size={14} />
+            Upload your first video
+          </button>
+        </div>
+      ) : (
+        <div className="video-grid">
+          {videos.map((v) => (
+            <VideoCard
+              key={v.id}
+              video={v}
+              variant="library"
+              onDelete={handleDelete}
+              deleting={deletingId === v.id}
+            />
+          ))}
+        </div>
+      )}
     </div>
   );
 }

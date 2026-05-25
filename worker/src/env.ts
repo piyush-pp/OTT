@@ -13,7 +13,8 @@ const schema = z.object({
   S3_FORCE_PATH_STYLE: z
     .string()
     .optional()
-    .transform((v) => v === "true" || v === "1")
+    .transform((v) => v === "true" || v === "1"),
+  WORKER_CONCURRENCY: z.coerce.number().int().min(1).default(2)
 });
 
 export const env = schema.parse(process.env);

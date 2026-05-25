@@ -33,19 +33,19 @@ export async function transcodeToHls(params: {
       params.inputPath,
 
       // Video
-      "-vf",
-      `scale=-2:${r.height}`,
-      "-c:v",
-      "libx264",
-      "-profile:v",
+      "-vf",  //video filter
+      `scale=-2:${r.height}`,  //scale video to desired height - 2x width bcz h264 need even
+      "-c:v",  //video codec
+      "libx264",  //H.264 codec
+      "-profile:v",  //what compression tools allowed - baseline, main, high, high10, high422, high444
       "main",
-      "-preset",
-      "veryfast",
-      "-crf",
-      "20",
-      "-maxrate",
+      "-preset",  //how hard encoder works
+      "veryfast", // ultrafast, superfast, veryfast, faster, fast, medium, slow, slower, veryslow
+      "-crf",  //constant rate factor - 0-51, 0-best quality, 51-worst quality
+      "20",   //target visual quality
+      "-maxrate",  //max bitrate
       String(Math.floor(r.bandwidth / 1000)) + "k",
-      "-bufsize",
+      "-bufsize",  //buffer size
       String(Math.floor((r.bandwidth * 2) / 1000)) + "k",
 
       // Audio
@@ -99,8 +99,56 @@ export async function generateThumbnail(params: { inputPath: string; outPath: st
     "1",
     "-q:v",
     "2",
+    "-update",
+    "1",
+    "-threads",
+    "1",
     params.outPath
   ]);
+}
+
+export type ThumbnailSize = { name: "sm" | "md" | "lg"; width: number; height: number };
+
+export const THUMBNAIL_SIZES: ThumbnailSize[] = [
+  { name: "sm", width: 320, height: 180 },
+  { name: "md", width: 640, height: 360 },
+  { name: "lg", width: 1280, height: 720 }
+];
+
+/**
+ * Generate three thumbnail sizes from the 1-second mark of the input video.
+ * Each size is written to `${outDir}/thumb_<name>.jpg`.
+ */
+export async function generateThumbnails(params: {
+  inputPath: string;
+  outDir: string;
+}): Promise<{ size: ThumbnailSize; outPath: string }[]> {
+  await mkdir(params.outDir, { recursive: true });
+  const results: { size: ThumbnailSize; outPath: string }[] = [];
+  for (const s of THUMBNAIL_SIZES) {
+    const outPath = path.join(params.outDir, `thumb_${s.name}.jpg`);
+    await runFfmpeg([
+      "-hide_banner",
+      "-y",
+      "-ss",
+      "00:00:01",
+      "-i",
+      params.inputPath,
+      "-vf",
+      `scale=${s.width}:${s.height}:force_original_aspect_ratio=decrease,pad=${s.width}:${s.height}:(ow-iw)/2:(oh-ih)/2`,
+      "-frames:v",
+      "1",
+      "-q:v",
+      "2",
+      "-update",
+      "1",
+      "-threads",
+      "1",
+      outPath
+    ]);
+    results.push({ size: s, outPath });
+  }
+  return results;
 }
 
 function buildMasterPlaylist() {

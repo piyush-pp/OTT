@@ -14,31 +14,140 @@ enum VideoStatus {
   FAILED
 }
 
-model User {
-  id           String  @id @default(cuid())
-  email        String  @unique
-  passwordHash String
-  createdAt    DateTime @default(now())
+enum Visibility {
+  PRIVATE
+  UNLISTED
+  PUBLIC
+}
 
-  videos       Video[]
+enum UserRole {
+  USER
+  ADMIN
+}
+
+model User {
+  id                       String    @id @default(cuid())
+  email                    String    @unique
+  passwordHash             String
+  emailVerified            Boolean   @default(false)
+  emailVerifyTokenHash     String?   @unique
+  emailVerifyTokenExpires  DateTime?
+  role                     UserRole  @default(USER)
+  displayName              String?
+  createdAt                DateTime  @default(now())
+
+  videos         Video[]
+  refreshTokens  RefreshToken[]
+  passwordResets PasswordResetToken[]
+  watchHistory   WatchHistory[]
+  shareLinks     ShareLink[]
+  auditLogs      AuditLog[]
+}
+
+model RefreshToken {
+  id        String    @id @default(cuid())
+  tokenHash String    @unique
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  revokedAt DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId])
+}
+
+model PasswordResetToken {
+  id        String    @id @default(cuid())
+  tokenHash String    @unique
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId])
 }
 
 model Video {
-  id          String      @id @default(cuid())
-  title       String
-  status      VideoStatus @default(UPLOADED)
+  id           String      @id @default(cuid())
+  title        String
+  description  String?
+  status       VideoStatus @default(UPLOADED)
+  visibility   Visibility  @default(PRIVATE)
+  category     String?
+  featured     Boolean     @default(false)
 
-  inputUrl    String
-  inputKey    String
-  playbackUrl String?
+  inputUrl     String
+  inputKey     String
+  playbackUrl  String?
   thumbnailUrl String?
-  progress    Int         @default(0)
-  error       String?
+  progress     Int         @default(0)
+  duration     Int?
+  sizeBytes    BigInt?
+  viewCount    Int         @default(0)
+  error        String?
 
-  createdAt   DateTime    @default(now())
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+  deletedAt    DateTime?
 
-  userId      String
-  user        User        @relation(fields: [userId], references: [id])
+  userId       String
+  user         User        @relation(fields: [userId], references: [id])
+
+  watchHistory WatchHistory[]
+  shareLinks   ShareLink[]
 
   @@index([userId, createdAt])
+  @@index([visibility, status, createdAt])
+  @@index([category, visibility])
+  @@index([featured, visibility])
+  @@index([deletedAt])
+}
+
+model WatchHistory {
+  id          String    @id @default(cuid())
+  userId      String
+  videoId     String
+  watchedAt   DateTime  @default(now())
+  positionSec Int       @default(0)
+  completedAt DateTime?
+
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  video Video @relation(fields: [videoId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, videoId])
+  @@index([userId, watchedAt])
+}
+
+model ShareLink {
+  id        String    @id @default(cuid())
+  tokenHash String    @unique
+  videoId   String
+  userId    String
+  expiresAt DateTime
+  revokedAt DateTime?
+  createdAt DateTime  @default(now())
+
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  video Video @relation(fields: [videoId], references: [id], onDelete: Cascade)
+
+  @@index([videoId])
+  @@index([userId])
+}
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  userId     String?
+  action     String
+  entityType String?
+  entityId   String?
+  metadata   Json?
+  ip         String?
+  userAgent  String?
+  createdAt  DateTime @default(now())
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([userId, createdAt])
+  @@index([action, createdAt])
 }
