@@ -27,7 +27,7 @@ export function SharePage() {
           navigate("/browse");
           return;
         }
-        navigate(`/videos/${videoId}`, { replace: true });
+        navigate(`/videos/${videoId}?shareToken=${token}`, { replace: true });
       })
       .catch((e) => {
         toast.error(e instanceof Error ? e.message : "Share link expired or invalid");

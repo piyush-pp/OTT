@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import videojs from "video.js";
 import "video.js/dist/video-js.css";
 import { ArrowLeft, Code2, Eye, Globe, Lock, Link as LinkIcon, Share2, Trash2 } from "lucide-react";
@@ -70,6 +70,8 @@ function VisibilityPill({ v }: { v?: Video["visibility"] }) {
 export function PlayerPage() {
   const navigate = useNavigate();
   const { id } = useParams();
+  const [searchParams] = useSearchParams();
+  const shareToken = searchParams.get("shareToken");
   const [video, setVideo] = useState<Video | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [showShare, setShowShare] = useState(false);
@@ -83,6 +85,29 @@ export function PlayerPage() {
 
   async function fetchOnce() {
     if (!id) return;
+
+    // Share-token path: fetch via the share resolve endpoint (no auth needed)
+    if (shareToken) {
+      try {
+        const res = await api<{ video: Video; playbackUrl: string }>(
+          `/api/v1/share/${shareToken}`
+        );
+        const v = res.video;
+        setVideo(v);
+        if (res.playbackUrl && !lockedSrc.current) {
+          lockedSrc.current = res.playbackUrl.startsWith("http")
+            ? res.playbackUrl
+            : apiUrl(res.playbackUrl);
+        }
+        return v;
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : "Share link expired or invalid";
+        toast.error(msg);
+        navigate("/browse");
+        return null;
+      }
+    }
+
     // Try authed endpoint first if logged in, else fall back to public
     try {
       const v = authed
