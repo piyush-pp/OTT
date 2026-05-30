@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import { api, apiUrl, getAccessToken, getApiBaseUrl, isLoggedIn } from "../api/client";
 import { ShareModal } from "../components/ShareModal";
 import { EmbedModal } from "../components/EmbedModal";
+import { mountQualitySelector } from "../components/qualitySelector";
 
 type Video = {
   id: string;
@@ -208,6 +209,7 @@ export function PlayerPage() {
       sources: [{ src: lockedSrc.current, type: "application/x-mpegURL" }]
     });
     player.current = p;
+    const unmountQuality = mountQualitySelector(p);
 
     let resumePos: number | null = null;
     if (authed && id) {
@@ -268,6 +270,7 @@ export function PlayerPage() {
 
     return () => {
       if (interval) window.clearInterval(interval);
+      unmountQuality();
       try {
         p.off("loadedmetadata", onLoadedMeta);
         p.off("ended", onEnded);

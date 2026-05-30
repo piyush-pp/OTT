@@ -19,9 +19,9 @@
   --text-faint: #555555;
 
   /* Accent */
-  --accent: #6366f1;
-  --accent-hover: #7c7ff5;
-  --accent-soft: rgba(99, 102, 241, 0.12);
+  --accent: #e5334a;
+  --accent-hover: #f04560;
+  --accent-soft: rgba(229, 51, 74, 0.12);
 
   /* Status */
   --success: #10b981;
@@ -1130,7 +1130,7 @@ p {
 .player-wrap {
   width: 100%;
   aspect-ratio: 16 / 9;
-  max-height: calc(100vh - 220px);
+  max-height: calc(100vh - 320px);
   border-radius: var(--r-lg);
   overflow: hidden;
   border: 1px solid var(--border);
@@ -1190,6 +1190,83 @@ p {
   padding-top: 16px;
   border-top: 1px solid var(--border);
   white-space: pre-wrap;
+}
+
+/* ===== Quality Selector ===== */
+
+.vjs-quality-selector {
+  display: inline-flex;
+  align-items: center;
+  align-self: stretch;
+}
+
+.vjs-quality-btn {
+  background: transparent;
+  border: none;
+  color: rgba(255, 255, 255, 0.85);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  padding: 0 10px;
+  height: 100%;
+  cursor: pointer;
+  min-width: 38px;
+  font-family: inherit;
+  transition: color 0.15s;
+  line-height: 1;
+}
+
+.vjs-quality-btn:hover {
+  color: #fff;
+}
+
+/* Menu appended to <body> — position: fixed bypasses overflow:hidden on the player */
+.vjs-quality-menu {
+  position: fixed;
+  display: none;
+  list-style: none;
+  margin: 0;
+  padding: 4px 0;
+  min-width: 120px;
+  background: rgba(14, 14, 14, 0.97);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.75);
+  z-index: 99999;
+  backdrop-filter: blur(10px);
+}
+
+.vjs-quality-menu.open {
+  display: block;
+}
+
+.vjs-quality-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 9px 16px;
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.65);
+  cursor: pointer;
+  transition: background 0.1s, color 0.1s;
+  white-space: nowrap;
+}
+
+.vjs-quality-item:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+}
+
+.vjs-quality-item.active {
+  color: #fff;
+  font-weight: 600;
+}
+
+.vjs-quality-check {
+  color: var(--accent);
+  font-size: 13px;
+  line-height: 1;
 }
 
 /* ===== Empty state ===== */

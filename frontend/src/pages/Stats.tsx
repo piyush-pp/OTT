@@ -133,9 +133,9 @@ function ChartCard({
                 fontSize: 12
               }}
               labelStyle={{ color: "#ededed" }}
-              cursor={{ fill: "rgba(99,102,241,0.08)" }}
+              cursor={{ fill: "rgba(229,51,74,0.08)" }}
             />
-            <Bar dataKey="count" fill="#6366f1" radius={[4, 4, 0, 0]} />
+            <Bar dataKey="count" fill="#e5334a" radius={[4, 4, 0, 0]} />
           </BarChart>
         </ResponsiveContainer>
       </div>
