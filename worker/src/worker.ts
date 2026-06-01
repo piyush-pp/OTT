@@ -13,6 +13,12 @@ import {
   transcodeToHls
 } from "./transcode/ffmpeg.js";
 
+type AdTranscodeJob = {
+  creativeId: string;
+  bucket: string;
+  inputKey: string;
+};
+
 type VideoTranscodeJob = {
   videoId: string;
   bucket: string;
@@ -157,13 +163,99 @@ worker.on("failed", (job, err) => {
   console.error("Job failed", job?.id, err);
 });
 
+// ─── Ad Transcode Worker ──────────────────────────────────────────────────────
+// Identical FFmpeg pipeline as content — same 3 renditions, same 4s segments.
+// Outputs to ads/{creativeId}/hls/ instead of videos/{videoId}/hls/.
+
+const adWorker = new Worker<AdTranscodeJob>(
+  "ad-transcode",
+  async (job) => {
+    const { creativeId, bucket, inputKey } = job.data;
+
+    await prisma.adCreative.update({
+      where: { id: creativeId },
+      data: { status: "PROCESSING", error: null }
+    });
+
+    const jobDir = path.join(os.tmpdir(), "ott-worker", `ad-${creativeId}`);
+    const inputPath = path.join(jobDir, "input");
+    const outDir = path.join(jobDir, "hls");
+    const thumbDir = path.join(jobDir, "thumbs");
+
+    try {
+      await downloadToFile({ bucket, key: inputKey, filePath: inputPath });
+
+      const { masterPlaylist } = await transcodeToHls({ inputPath, outDir });
+
+      // Upload master playlist
+      await putSmallObject({
+        bucket,
+        key: `ads/${creativeId}/hls/master.m3u8`,
+        body: masterPlaylist,
+        contentType: "application/vnd.apple.mpegurl"
+      });
+
+      // Generate thumbnail from ad creative
+      const thumbResults = await generateThumbnails({ inputPath, outDir: thumbDir });
+      const mdResult = thumbResults.find((t) => t.size.name === "md") ?? thumbResults[0]!;
+      const thumbKey = `ads/${creativeId}/thumbnail.jpg`;
+      await uploadFile({ bucket, key: thumbKey, filePath: mdResult.outPath, contentType: "image/jpeg" });
+
+      // Upload all HLS segments and variant playlists
+      const files = await walkFiles(outDir);
+      for (const filePath of files) {
+        const rel = path.relative(outDir, filePath).replaceAll(path.sep, "/");
+        const key = `ads/${creativeId}/hls/${rel}`;
+        const contentType = rel.endsWith(".m3u8")
+          ? "application/vnd.apple.mpegurl"
+          : rel.endsWith(".ts")
+            ? "video/mp2t"
+            : undefined;
+        await uploadFile({ bucket, key, filePath, contentType });
+      }
+
+      await prisma.adCreative.update({
+        where: { id: creativeId },
+        data: {
+          status: "READY",
+          hlsBasePath: `ads/${creativeId}/hls`,
+          thumbnailKey: thumbKey
+        }
+      });
+
+      console.log(`[ad-worker] creative ${creativeId} transcoded successfully`);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Unknown error";
+      await prisma.adCreative.update({
+        where: { id: creativeId },
+        data: { status: "FAILED", error: message }
+      });
+      throw err;
+    } finally {
+      await rm(jobDir, { recursive: true, force: true });
+    }
+  },
+  {
+    connection: { url: env.REDIS_URL },
+    concurrency: env.WORKER_CONCURRENCY
+  }
+);
+
+adWorker.on("ready", () => {
+  console.log(`[ad-worker] ready: listening on queue ad-transcode`);
+});
+
+adWorker.on("failed", (job, err) => {
+  console.error("[ad-worker] job failed", job?.id, err);
+});
+
 let shuttingDown = false;
 const shutdown = async (signal: string) => {
   if (shuttingDown) return;
   shuttingDown = true;
   console.log(`[worker] ${signal} received — finishing current job then exiting`);
   try {
-    await worker.close();
+    await Promise.all([worker.close(), adWorker.close()]);
   } catch (err) {
     console.error("[worker] error closing worker", err);
   }

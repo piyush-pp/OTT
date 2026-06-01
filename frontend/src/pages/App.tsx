@@ -18,6 +18,10 @@ import { PlayerPage } from "./Player";
 import { BrowsePage } from "./Browse";
 import { SharePage } from "./Share";
 import { StatsPage } from "./Stats";
+import { AdminCreativesPage } from "./admin/Creatives";
+import { AdminCampaignsPage } from "./admin/Campaigns";
+import { AdminPlacementsPage } from "./admin/Placements";
+import { AdminAdAnalyticsPage } from "./admin/AdAnalytics";
 
 function initialsFromEmail(email: string | null): string {
   if (!email) return "?";
@@ -133,6 +137,16 @@ function TopNav() {
               Stats
             </NavLink>
           )}
+          {authed && admin && (
+            <NavLink
+              to="/admin/creatives"
+              className={({ isActive }) =>
+                `topnav-link ${isActive || location.pathname.startsWith("/admin") ? "active" : ""}`
+              }
+            >
+              Ad Manager
+            </NavLink>
+          )}
         </nav>
 
         <div className="topnav-right">
@@ -174,6 +188,49 @@ function TopNav() {
   );
 }
 
+function AdminNav() {
+  const location = useLocation();
+  if (!location.pathname.startsWith("/admin")) return null;
+
+  const links = [
+    { to: "/admin/creatives", label: "Creatives" },
+    { to: "/admin/campaigns", label: "Campaigns" },
+    { to: "/admin/placements", label: "Placements" },
+    { to: "/admin/analytics", label: "Analytics" }
+  ];
+
+  return (
+    <nav
+      style={{
+        background: "var(--bg-elevated)",
+        borderBottom: "1px solid var(--border)",
+        padding: "0 24px",
+        display: "flex",
+        gap: 0
+      }}
+    >
+      {links.map((l) => (
+        <NavLink
+          key={l.to}
+          to={l.to}
+          style={({ isActive }) => ({
+            display: "inline-flex",
+            alignItems: "center",
+            padding: "10px 14px",
+            fontSize: 13,
+            fontWeight: 500,
+            color: isActive ? "var(--accent)" : "var(--text-muted)",
+            borderBottom: isActive ? "2px solid var(--accent)" : "2px solid transparent",
+            transition: "color 120ms"
+          })}
+        >
+          {l.label}
+        </NavLink>
+      ))}
+    </nav>
+  );
+}
+
 function RequireAuth({ children }: { children: JSX.Element }) {
   const authed = isLoggedIn();
   if (!authed) return <Navigate to="/auth" replace />;
@@ -184,6 +241,7 @@ export function App() {
   return (
     <div className="app-shell">
       <TopNav />
+      <AdminNav />
       <Toaster theme="dark" position="top-right" richColors />
       <Routes>
         <Route path="/" element={<Navigate to="/browse" replace />} />
@@ -215,6 +273,40 @@ export function App() {
           }
         />
         <Route path="/s/:token" element={<SharePage />} />
+        {/* Admin routes */}
+        <Route
+          path="/admin/creatives"
+          element={
+            <RequireAuth>
+              <AdminCreativesPage />
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/admin/campaigns"
+          element={
+            <RequireAuth>
+              <AdminCampaignsPage />
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/admin/placements"
+          element={
+            <RequireAuth>
+              <AdminPlacementsPage />
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/admin/analytics"
+          element={
+            <RequireAuth>
+              <AdminAdAnalyticsPage />
+            </RequireAuth>
+          }
+        />
+        <Route path="/admin" element={<Navigate to="/admin/creatives" replace />} />
         {/* Legacy redirect — old route was /videos */}
         <Route path="/videos" element={<Navigate to="/library" replace />} />
         <Route path="*" element={<Navigate to="/browse" replace />} />

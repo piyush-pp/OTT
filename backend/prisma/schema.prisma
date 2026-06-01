@@ -135,6 +135,119 @@ model ShareLink {
   @@index([userId])
 }
 
+// ─── Ad System ────────────────────────────────────────────────────────────────
+
+enum AdCreativeStatus {
+  PENDING
+  PROCESSING
+  READY
+  FAILED
+}
+
+enum AdCampaignStatus {
+  DRAFT
+  ACTIVE
+  PAUSED
+  DONE
+}
+
+enum AdBreakType {
+  PRE
+  MID
+  POST
+}
+
+enum AdEventType {
+  IMPRESSION
+  Q1
+  Q2
+  Q3
+  COMPLETE
+  SKIP
+  CLICK
+}
+
+model AdCreative {
+  id              String            @id @default(cuid())
+  title           String
+  advertiserName  String
+  clickUrl        String?
+  skipOffsetSec   Int?              // null = non-skippable
+  durationSec     Int               // filled after transcode probes duration
+  status          AdCreativeStatus  @default(PENDING)
+  inputKey        String            // S3 key of raw uploaded MP4
+  hlsBasePath     String?           // e.g. ads/<id>/hls — set after transcode
+  thumbnailKey    String?           // S3 key for thumbnail
+  error           String?
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+
+  placements      AdPlacement[]
+  impressions     AdImpression[]
+
+  @@index([status])
+}
+
+model AdCampaign {
+  id          String           @id @default(cuid())
+  name        String
+  advertiser  String
+  budgetCents Int              @default(0)
+  startDate   DateTime
+  endDate     DateTime
+  status      AdCampaignStatus @default(DRAFT)
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  placements  AdPlacement[]
+
+  @@index([status, startDate, endDate])
+}
+
+model AdPlacement {
+  id                String      @id @default(cuid())
+  campaignId        String
+  creativeId        String
+  breakType         AdBreakType
+  midRollOffsetSec  Int?        // only relevant when breakType = MID
+  targetCategory    String?     // null = all categories
+  targetVideoId     String?     // null = all videos
+  maxAdsPerPod      Int         @default(1)
+  frequencyCapPerDay Int        @default(3)
+  createdAt         DateTime    @default(now())
+
+  campaign    AdCampaign   @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  creative    AdCreative   @relation(fields: [creativeId], references: [id], onDelete: Cascade)
+  impressions AdImpression[]
+
+  @@index([campaignId])
+  @@index([creativeId])
+  @@index([targetCategory])
+  @@index([targetVideoId])
+}
+
+model AdImpression {
+  id          String      @id @default(cuid())
+  creativeId  String
+  placementId String
+  videoId     String
+  userId      String?
+  sessionId   String
+  event       AdEventType
+  recordedAt  DateTime    @default(now())
+
+  creative    AdCreative  @relation(fields: [creativeId], references: [id], onDelete: Cascade)
+  placement   AdPlacement @relation(fields: [placementId], references: [id], onDelete: Cascade)
+
+  @@index([creativeId, event, recordedAt])
+  @@index([placementId, recordedAt])
+  @@index([videoId, recordedAt])
+  @@index([userId, creativeId, recordedAt])
+  @@index([sessionId])
+}
+
+// ─── Audit ────────────────────────────────────────────────────────────────────
+
 model AuditLog {
   id         String   @id @default(cuid())
   userId     String?
