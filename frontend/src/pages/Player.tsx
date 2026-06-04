@@ -278,19 +278,19 @@ export function PlayerPage() {
         for (const cue of cueArray) {
           if (typeof cue.id !== "string" || !cue.value) continue;
 
-          // General ad-break badge cue
-          if (cue.id.startsWith("ad-break-") && cue.value.data === 1) {
+          // m3u8-parser returns custom DATERANGE attribute values as strings
+          // (e.g. X-SKIP-OFFSET=5 → "5"), so coerce before using numerically.
+          const dataNum = Number(cue.value.data);
+
+          // General ad-break badge cue (X-AD-BREAK=1)
+          if (cue.id.startsWith("ad-break-")) {
             foundBadgeCue = true;
           }
 
-          // Skip-offset cue
-          if (
-            cue.id.startsWith("ad-skip-") &&
-            typeof cue.value.data === "number" &&
-            !foundSkipCue
-          ) {
+          // Skip-offset cue (X-SKIP-OFFSET=N)
+          if (cue.id.startsWith("ad-skip-") && Number.isFinite(dataNum) && !foundSkipCue) {
             foundSkipCue = true;
-            skipOffset = cue.value.data as number;
+            skipOffset = dataNum;
             cueStart = cue.startTime as number;
             cueEnd = cue.endTime as number;
           }

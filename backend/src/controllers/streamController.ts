@@ -125,9 +125,16 @@ function buildAdBlock(params: {
 
   // General ad-break DATERANGE — enables "Advertisement" badge in the player
   // for ALL ad breaks (skippable and non-skippable alike).
+  //
+  // NOTE: we deliberately omit CLASS. When CLASS is present, VHS's
+  // DateRangesStorage assigns a numeric `classListIndex` to the daterange,
+  // and VHS emits one metadata cue *per* non-standard key — producing a second
+  // cue with the same cue.id but a numeric value, which collides with our
+  // custom-attribute cue on the client. Omitting CLASS yields exactly one cue
+  // per daterange (our X- attribute). START-DATE + DURATION + the epoch
+  // PROGRAM-DATE-TIME anchor are all that's needed to position the cue.
   lines.push(
     `#EXT-X-DATERANGE:ID="ad-break-${shortId}",` +
-      `CLASS="com.apple.hls.interstitial",` +
       `START-DATE="${startDate}",` +
       `DURATION=${adBreak.durationSec},` +
       `X-AD-BREAK=1`
@@ -137,7 +144,6 @@ function buildAdBlock(params: {
   if (adBreak.skipOffsetSec !== undefined) {
     lines.push(
       `#EXT-X-DATERANGE:ID="ad-skip-${shortId}",` +
-        `CLASS="com.apple.hls.interstitial",` +
         `START-DATE="${startDate}",` +
         `DURATION=${adBreak.durationSec},` +
         `X-SKIP-OFFSET=${adBreak.skipOffsetSec}`
