@@ -398,21 +398,22 @@ export async function streamHls(req: Request, res: Response, next: NextFunction)
       let sessionId = (req.query.session as string) ?? "";
 
       // ── Session init on master.m3u8 ──────────────────────────────────────────
+      // Ads are served to ALL viewers (authenticated, public, and share-link).
+      // userId is passed when available so frequency capping applies to logged-in
+      // users; anonymous viewers simply aren't frequency-capped (no identity to
+      // key on) but still get targeted, auctioned, stitched ads.
       if (isMaster && !sessionId) {
         const userId = payload.type === "stream" ? payload.sub : undefined;
-        // Only authenticated users get personalised ad sessions
-        if (userId) {
-          const video = await prisma.video.findUnique({
-            where: { id },
-            select: { category: true }
-          });
-          const session = await buildAndStoreSession({
-            videoId: id,
-            userId,
-            category: video?.category ?? null
-          });
-          if (session) sessionId = session.sessionId;
-        }
+        const video = await prisma.video.findUnique({
+          where: { id },
+          select: { category: true }
+        });
+        const session = await buildAndStoreSession({
+          videoId: id,
+          userId,
+          category: video?.category ?? null
+        });
+        if (session) sessionId = session.sessionId;
       }
 
       let rewritten: string;
