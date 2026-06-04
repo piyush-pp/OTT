@@ -85,6 +85,8 @@ export function PlayerPage() {
   const [showShare, setShowShare] = useState(false);
   const [showEmbed, setShowEmbed] = useState(false);
   const [adOverlay, setAdOverlay] = useState<AdOverlay | null>(null);
+  const [showAdBadge, setShowAdBadge] = useState(false);
+  const prevShowBadgeRef = useRef(false);
   const videoEl = useRef<HTMLVideoElement | null>(null);
   const player = useRef<ReturnType<typeof videojs> | null>(null);
   const lockedSrc = useRef<string | null>(null);
@@ -250,19 +252,21 @@ export function PlayerPage() {
     const unmountQuality = mountQualitySelector(p);
 
     // ── Ad skip-button overlay ──────────────────────────────────────────────
-    // On each timeupdate, scan the VHS metadata text track for an active
-    // EXT-X-DATERANGE cue that was emitted for a skippable ad break.
-    // VHS creates one cue per custom attribute in the DATERANGE tag; our skip
-    // cues have id="ad-skip-*" and value = { key: undefined, data: skipOffsetSec }.
+    // On each timeupdate, scan the VHS metadata text track for active EXT-X-DATERANGE
+    // cues emitted by the SSAI server.  VHS creates one cue per custom attribute;
+    // we use two ID prefixes:
+    //   "ad-break-*"  → general ad-break marker (X-AD-BREAK=1) → "Advertisement" badge
+    //   "ad-skip-*"   → skip-offset marker (X-SKIP-OFFSET=N) → skip button countdown
     const onTimeUpdateAd = () => {
-      const tracks = p.textTracks();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const trackArray = Array.from(p.textTracks() as unknown as Iterable<any>) as any[];
+
+      let foundBadgeCue = false;
       let foundSkipCue = false;
       let skipOffset = 0;
       let cueStart = 0;
       let cueEnd = 0;
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const trackArray = Array.from(tracks as unknown as Iterable<any>) as any[];
       for (const track of trackArray) {
         if (track.kind !== "metadata") continue;
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -272,23 +276,34 @@ export function PlayerPage() {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const cueArray = Array.from(activeCues as Iterable<any>) as any[];
         for (const cue of cueArray) {
-          // VHS sets id from the DATERANGE ID attribute; we prefix ours with "ad-skip-"
+          if (typeof cue.id !== "string" || !cue.value) continue;
+
+          // General ad-break badge cue
+          if (cue.id.startsWith("ad-break-") && cue.value.data === 1) {
+            foundBadgeCue = true;
+          }
+
+          // Skip-offset cue
           if (
-            typeof cue.id === "string" &&
             cue.id.startsWith("ad-skip-") &&
-            cue.value &&
-            typeof cue.value.data === "number"
+            typeof cue.value.data === "number" &&
+            !foundSkipCue
           ) {
             foundSkipCue = true;
             skipOffset = cue.value.data as number;
             cueStart = cue.startTime as number;
             cueEnd = cue.endTime as number;
-            break;
           }
         }
-        if (foundSkipCue) break;
       }
 
+      // ── Badge (shown for ALL ad breaks) ──────────────────────────────────
+      if (foundBadgeCue !== prevShowBadgeRef.current) {
+        prevShowBadgeRef.current = foundBadgeCue;
+        setShowAdBadge(foundBadgeCue);
+      }
+
+      // ── Skip overlay (only for skippable ads) ────────────────────────────
       if (!foundSkipCue) {
         if (prevInAdRef.current) {
           prevInAdRef.current = false;
@@ -304,7 +319,7 @@ export function PlayerPage() {
       const canSkip = elapsed >= skipOffset;
       const countdown = canSkip ? 0 : Math.ceil(skipOffset - elapsed);
 
-      // Only trigger a React re-render when something actually changes
+      // Only re-render when something actually changes
       if (canSkip !== prevCanSkipRef.current || countdown !== prevCountdownRef.current) {
         prevCanSkipRef.current = canSkip;
         prevCountdownRef.current = countdown;
@@ -387,7 +402,9 @@ export function PlayerPage() {
       prevInAdRef.current = false;
       prevCountdownRef.current = -1;
       prevCanSkipRef.current = null;
+      prevShowBadgeRef.current = false;
       setAdOverlay(null);
+      setShowAdBadge(false);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [video?.status]);
@@ -420,7 +437,7 @@ export function PlayerPage() {
       </button>
 
       <div className="player-page" style={{ marginTop: 16 }}>
-        <div className="player-wrap">
+        <div className={`player-wrap${showAdBadge ? " in-ad" : ""}`}>
           {video?.status === "READY" ? (
             <>
               <video
@@ -428,6 +445,10 @@ export function PlayerPage() {
                 className="video-js vjs-big-play-centered"
                 playsInline
               />
+              {/* "Advertisement" label — shown for any ad break */}
+              {showAdBadge && (
+                <div className="ad-badge">Advertisement</div>
+              )}
               {/* Ad skip overlay — only rendered for skippable ads */}
               {adOverlay && (
                 <div className="ad-skip-overlay">

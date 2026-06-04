@@ -45,7 +45,8 @@ const placementSchema = z.object({
     .optional(),
   targetVideoId: z.string().nullable().optional(),
   maxAdsPerPod: z.number().int().min(1).max(5).default(1),
-  frequencyCapPerDay: z.number().int().min(0).default(3)
+  frequencyCapPerDay: z.number().int().min(0).default(3),
+  cpmCents: z.number().int().min(0).default(0)    // floor CPM in US cents for auction
 });
 
 const analyticsQuerySchema = z.object({
@@ -220,7 +221,8 @@ export async function createPlacement(req: Request, res: Response, next: NextFun
     const placement = await adService.createPlacement({
       ...body,
       targetCategory: body.targetCategory ?? undefined,
-      targetVideoId: body.targetVideoId ?? undefined
+      targetVideoId: body.targetVideoId ?? undefined,
+      cpmCents: body.cpmCents
     });
     res.status(201).json(placement);
   } catch (err) {

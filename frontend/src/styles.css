@@ -1192,6 +1192,36 @@ p {
   white-space: pre-wrap;
 }
 
+/* ===== Ad Player UI ===== */
+
+/* "Advertisement" badge — top-left corner of the player */
+.ad-badge {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  padding: 3px 10px;
+  background: rgba(229, 51, 74, 0.82);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  border-radius: 3px;
+  z-index: 20;
+  pointer-events: none;
+  backdrop-filter: blur(4px);
+}
+
+/* Accent-colour the Video.js progress-bar fill during ad playback */
+.player-wrap.in-ad .vjs-play-progress,
+.player-wrap.in-ad .vjs-play-progress::before {
+  background-color: var(--accent) !important;
+}
+
+.player-wrap.in-ad .vjs-load-progress div {
+  background: rgba(229, 51, 74, 0.25) !important;
+}
+
 /* ===== Ad Skip Overlay ===== */
 
 /* Absolute-positioned container in the bottom-right of .player-wrap */

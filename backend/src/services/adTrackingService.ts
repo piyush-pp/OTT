@@ -18,6 +18,9 @@ export function recordAdEvent(params: {
   userId?: string;
   event: AdEventType;
 }) {
+  // Skip tracking for slate breaks — they have no real DB records
+  if (params.creativeId === "slate" || params.placementId.startsWith("slate")) return;
+
   // Defer to next event-loop tick so we never block segment delivery
   setImmediate(() => {
     prisma.adImpression

@@ -15,6 +15,7 @@ interface PlacementItem {
   targetVideoId: string | null;
   maxAdsPerPod: number;
   frequencyCapPerDay: number;
+  cpmCents: number;
   createdAt: string;
   campaign: { id: string; name: string; status: string };
   creative: { id: string; title: string; status: string; durationSec: number };
@@ -72,6 +73,7 @@ function CreateModal({ campaigns, creatives, categories, onClose, onSaved }: Cre
   const [targetVideoId, setTargetVideoId] = useState("");
   const [maxAds, setMaxAds] = useState("1");
   const [freqCap, setFreqCap] = useState("3");
+  const [cpm, setCpm] = useState("0");
   const [saving, setSaving] = useState(false);
 
   const readyCreatives = creatives.filter((c) => c.status === "READY");
@@ -87,7 +89,8 @@ function CreateModal({ campaigns, creatives, categories, onClose, onSaved }: Cre
       creativeId,
       breakType,
       maxAdsPerPod: parseInt(maxAds, 10),
-      frequencyCapPerDay: parseInt(freqCap, 10)
+      frequencyCapPerDay: parseInt(freqCap, 10),
+      cpmCents: Math.round(parseFloat(cpm || "0") * 100) // UI shows dollars, API takes cents
     };
     if (breakType === "MID") body.midRollOffsetSec = parseInt(midOffset, 10);
     if (targetCategory) body.targetCategory = targetCategory;
@@ -183,7 +186,7 @@ function CreateModal({ campaigns, creatives, categories, onClose, onSaved }: Cre
                 </div>
               </div>
 
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
                 <div>
                   <label className="modal-section-label">Max Ads Per Pod</label>
                   <input className="input" type="number" min={1} max={5} value={maxAds} onChange={(e) => setMaxAds(e.target.value)} />
@@ -191,6 +194,10 @@ function CreateModal({ campaigns, creatives, categories, onClose, onSaved }: Cre
                 <div>
                   <label className="modal-section-label">Frequency Cap / Day</label>
                   <input className="input" type="number" min={0} value={freqCap} onChange={(e) => setFreqCap(e.target.value)} />
+                </div>
+                <div>
+                  <label className="modal-section-label">Floor CPM (USD)</label>
+                  <input className="input" type="number" min={0} step={0.01} value={cpm} onChange={(e) => setCpm(e.target.value)} placeholder="0.00" />
                 </div>
               </div>
 
@@ -297,7 +304,7 @@ export function AdminPlacementsPage() {
           <table style={{ width: "100%", borderCollapse: "collapse" }}>
             <thead>
               <tr style={{ borderBottom: "1px solid var(--border)" }}>
-                {["Creative", "Campaign", "Break", "Targeting", "Cap / Pod", ""].map((h) => (
+                {["Creative", "Campaign", "Break", "Targeting", "Cap / Pod", "CPM", ""].map((h) => (
                   <th key={h} style={{ padding: "10px 16px", textAlign: "left", fontSize: 11, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em", color: "var(--text-muted)" }}>
                     {h}
                   </th>
@@ -328,6 +335,9 @@ export function AdminPlacementsPage() {
                   </td>
                   <td style={{ padding: "12px 16px", fontSize: 12 }}>
                     {p.frequencyCapPerDay}/day · max {p.maxAdsPerPod}
+                  </td>
+                  <td style={{ padding: "12px 16px", fontSize: 12, color: "var(--text-muted)" }}>
+                    {p.cpmCents > 0 ? `$${(p.cpmCents / 100).toFixed(2)}` : "—"}
                   </td>
                   <td style={{ padding: "12px 16px" }}>
                     <button

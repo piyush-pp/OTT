@@ -116,15 +116,27 @@ function buildAdBlock(params: {
   lines.push(`#EXT-X-CUE-OUT:${adBreak.durationSec}`);
   lines.push("#EXT-X-DISCONTINUITY");
 
-  // Optional skip-after tag so the player can show a "Skip Ad" button.
-  // START-DATE is expressed as epoch + breakOffsetSec so that VHS can map it to
-  // the correct media-timeline position (requires EXT-X-PROGRAM-DATE-TIME:epoch
-  // to be present earlier in the playlist — injected by stitchVariantPlaylist).
+  // epoch 0 + breakOffsetSec = exact media-timeline position of this ad break.
+  // START-DATE uses this encoding so VHS can map DATERANGE cues to correct
+  // media-timeline positions (requires EXT-X-PROGRAM-DATE-TIME:epoch injected
+  // earlier in the playlist by stitchVariantPlaylist).
+  const startDate = new Date(Math.round(breakOffsetSec * 1000)).toISOString();
+  const shortId = adBreak.creativeId.slice(0, 8);
+
+  // General ad-break DATERANGE — enables "Advertisement" badge in the player
+  // for ALL ad breaks (skippable and non-skippable alike).
+  lines.push(
+    `#EXT-X-DATERANGE:ID="ad-break-${shortId}",` +
+      `CLASS="com.apple.hls.interstitial",` +
+      `START-DATE="${startDate}",` +
+      `DURATION=${adBreak.durationSec},` +
+      `X-AD-BREAK=1`
+  );
+
+  // Skip-offset DATERANGE — only for skippable ads.
   if (adBreak.skipOffsetSec !== undefined) {
-    // epoch 0 + breakOffsetSec = exact media-timeline position of this ad break
-    const startDate = new Date(Math.round(breakOffsetSec * 1000)).toISOString();
     lines.push(
-      `#EXT-X-DATERANGE:ID="ad-skip-${adBreak.creativeId.slice(0, 8)}",` +
+      `#EXT-X-DATERANGE:ID="ad-skip-${shortId}",` +
         `CLASS="com.apple.hls.interstitial",` +
         `START-DATE="${startDate}",` +
         `DURATION=${adBreak.durationSec},` +
@@ -177,8 +189,9 @@ async function stitchVariantPlaylist(params: {
     })
   );
 
-  // Does any break have a skip offset? If so we need the PROGRAM-DATE-TIME anchor.
-  const hasSkippable = adBreaks.some((b) => b.skipOffsetSec !== undefined);
+  // Always inject an epoch-0 PROGRAM-DATE-TIME anchor so VHS can map every
+  // EXT-X-DATERANGE cue (ad-break and ad-skip) to the correct media-timeline
+  // position for badge detection and the skip button.
 
   const lines = content.split("\n");
   const out: string[] = [];
@@ -232,12 +245,9 @@ async function stitchVariantPlaylist(params: {
       if (!firstSegSeen) {
         firstSegSeen = true;
 
-        // Inject an epoch-0 PROGRAM-DATE-TIME so VHS can map EXT-X-DATERANGE
-        // START-DATEs (which we encode as epoch + breakOffsetSec) to the correct
-        // media-timeline positions for skip cue detection.
-        if (hasSkippable) {
-          out.push("#EXT-X-PROGRAM-DATE-TIME:1970-01-01T00:00:00.000Z");
-        }
+        // Inject epoch-0 PROGRAM-DATE-TIME so VHS anchors all DATERANGE cues
+        // (ad-badge and skip-button alike) to the correct media-timeline positions.
+        out.push("#EXT-X-PROGRAM-DATE-TIME:1970-01-01T00:00:00.000Z");
 
         const pre = remaining.filter((b) => b.offsetSec === 0);
         remaining = remaining.filter((b) => b.offsetSec !== 0);

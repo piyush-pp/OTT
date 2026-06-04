@@ -212,9 +212,10 @@ model AdPlacement {
   midRollOffsetSec  Int?        // only relevant when breakType = MID
   targetCategory    String?     // null = all categories
   targetVideoId     String?     // null = all videos
-  maxAdsPerPod      Int         @default(1)
-  frequencyCapPerDay Int        @default(3)
-  createdAt         DateTime    @default(now())
+  maxAdsPerPod       Int         @default(1)
+  frequencyCapPerDay Int         @default(3)
+  cpmCents           Int         @default(0)   // floor CPM in cents for auction ranking
+  createdAt          DateTime    @default(now())
 
   campaign    AdCampaign   @relation(fields: [campaignId], references: [id], onDelete: Cascade)
   creative    AdCreative   @relation(fields: [creativeId], references: [id], onDelete: Cascade)

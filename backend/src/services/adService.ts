@@ -155,6 +155,7 @@ export const adService = {
     targetVideoId?: string;
     maxAdsPerPod?: number;
     frequencyCapPerDay?: number;
+    cpmCents?: number;
   }) {
     // Verify campaign and creative exist
     const [campaign, creative] = await Promise.all([
@@ -177,7 +178,8 @@ export const adService = {
         targetCategory: params.targetCategory ?? null,
         targetVideoId: params.targetVideoId ?? null,
         maxAdsPerPod: params.maxAdsPerPod ?? 1,
-        frequencyCapPerDay: params.frequencyCapPerDay ?? 3
+        frequencyCapPerDay: params.frequencyCapPerDay ?? 3,
+        cpmCents: params.cpmCents ?? 0
       },
       include: { campaign: true, creative: true }
     });
