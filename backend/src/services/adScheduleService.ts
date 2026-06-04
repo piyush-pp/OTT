@@ -97,7 +97,44 @@ export async function buildAndStoreSession(params: {
 
   if (placements.length === 0) return null;
 
-  const adBreaks: AdBreakEntry[] = placements
+  // ── Frequency capping ──────────────────────────────────────────────────────
+  // For authenticated users, skip any creative they've already seen >= cap times
+  // in the last 24 hours.
+  let eligible = placements;
+
+  if (params.userId) {
+    const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
+
+    const impressionCounts = await prisma.adImpression.groupBy({
+      by: ["creativeId"],
+      where: {
+        userId: params.userId,
+        event: "IMPRESSION",
+        recordedAt: { gte: since }
+      },
+      _count: { creativeId: true }
+    });
+
+    const seenMap = new Map(
+      impressionCounts.map((r) => [r.creativeId, r._count.creativeId])
+    );
+
+    eligible = placements.filter((p) => {
+      const seen = seenMap.get(p.creativeId) ?? 0;
+      return seen < p.frequencyCapPerDay;
+    });
+
+    const capped = placements.length - eligible.length;
+    if (capped > 0) {
+      console.log(
+        `[adSchedule] frequency-capped ${capped} placement(s) for user ${params.userId}`
+      );
+    }
+  }
+
+  if (eligible.length === 0) return null;
+
+  const adBreaks: AdBreakEntry[] = eligible
     .map((p) => ({
       breakType: p.breakType as "PRE" | "MID" | "POST",
       offsetSec:

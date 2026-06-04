@@ -1192,6 +1192,53 @@ p {
   white-space: pre-wrap;
 }
 
+/* ===== Ad Skip Overlay ===== */
+
+/* Absolute-positioned container in the bottom-right of .player-wrap */
+.ad-skip-overlay {
+  position: absolute;
+  bottom: 56px; /* sit above the Video.js control bar */
+  right: 16px;
+  z-index: 20;
+  pointer-events: none; /* container is pass-through; children opt in */
+}
+
+/* Base pill shared by both states */
+.ad-skip-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  border-radius: 4px;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  white-space: nowrap;
+  pointer-events: auto;
+  border: none;
+  font-family: inherit;
+}
+
+/* Not yet skippable — greyed out, not interactive */
+.ad-skip-pending {
+  background: rgba(0, 0, 0, 0.65);
+  color: rgba(255, 255, 255, 0.55);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  cursor: default;
+}
+
+/* Skip is now available — accent-coloured, clickable */
+.ad-skip-ready {
+  background: var(--accent);
+  color: #fff;
+  cursor: pointer;
+  transition: background 120ms;
+}
+
+.ad-skip-ready:hover {
+  background: var(--accent-hover);
+}
+
 /* ===== Quality Selector ===== */
 
 .vjs-quality-selector {

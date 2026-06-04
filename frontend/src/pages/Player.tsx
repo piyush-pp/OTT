@@ -67,6 +67,14 @@ function VisibilityPill({ v }: { v?: Video["visibility"] }) {
   );
 }
 
+// ── Ad skip overlay state ─────────────────────────────────────────────────────
+
+interface AdOverlay {
+  canSkip: boolean;
+  countdown: number; // seconds until skip is allowed; 0 when canSkip is true
+  endTime: number;   // media time (seconds) at the end of the ad break
+}
+
 export function PlayerPage() {
   const navigate = useNavigate();
   const { id } = useParams();
@@ -76,10 +84,15 @@ export function PlayerPage() {
   const [deleting, setDeleting] = useState(false);
   const [showShare, setShowShare] = useState(false);
   const [showEmbed, setShowEmbed] = useState(false);
+  const [adOverlay, setAdOverlay] = useState<AdOverlay | null>(null);
   const videoEl = useRef<HTMLVideoElement | null>(null);
   const player = useRef<ReturnType<typeof videojs> | null>(null);
   const lockedSrc = useRef<string | null>(null);
   const seekedOnce = useRef(false);
+  // Refs to avoid flooding React with state updates on every timeupdate tick
+  const prevInAdRef = useRef(false);
+  const prevCountdownRef = useRef(-1);
+  const prevCanSkipRef = useRef<boolean | null>(null);
 
   const authed = isLoggedIn();
 
@@ -236,6 +249,71 @@ export function PlayerPage() {
     player.current = p;
     const unmountQuality = mountQualitySelector(p);
 
+    // ── Ad skip-button overlay ──────────────────────────────────────────────
+    // On each timeupdate, scan the VHS metadata text track for an active
+    // EXT-X-DATERANGE cue that was emitted for a skippable ad break.
+    // VHS creates one cue per custom attribute in the DATERANGE tag; our skip
+    // cues have id="ad-skip-*" and value = { key: undefined, data: skipOffsetSec }.
+    const onTimeUpdateAd = () => {
+      const tracks = p.textTracks();
+      let foundSkipCue = false;
+      let skipOffset = 0;
+      let cueStart = 0;
+      let cueEnd = 0;
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const trackArray = Array.from(tracks as unknown as Iterable<any>) as any[];
+      for (const track of trackArray) {
+        if (track.kind !== "metadata") continue;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const activeCues = track.activeCues as any;
+        if (!activeCues || !activeCues.length) continue;
+
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const cueArray = Array.from(activeCues as Iterable<any>) as any[];
+        for (const cue of cueArray) {
+          // VHS sets id from the DATERANGE ID attribute; we prefix ours with "ad-skip-"
+          if (
+            typeof cue.id === "string" &&
+            cue.id.startsWith("ad-skip-") &&
+            cue.value &&
+            typeof cue.value.data === "number"
+          ) {
+            foundSkipCue = true;
+            skipOffset = cue.value.data as number;
+            cueStart = cue.startTime as number;
+            cueEnd = cue.endTime as number;
+            break;
+          }
+        }
+        if (foundSkipCue) break;
+      }
+
+      if (!foundSkipCue) {
+        if (prevInAdRef.current) {
+          prevInAdRef.current = false;
+          prevCountdownRef.current = -1;
+          prevCanSkipRef.current = null;
+          setAdOverlay(null);
+        }
+        return;
+      }
+
+      prevInAdRef.current = true;
+      const elapsed = (p.currentTime() ?? 0) - cueStart;
+      const canSkip = elapsed >= skipOffset;
+      const countdown = canSkip ? 0 : Math.ceil(skipOffset - elapsed);
+
+      // Only trigger a React re-render when something actually changes
+      if (canSkip !== prevCanSkipRef.current || countdown !== prevCountdownRef.current) {
+        prevCanSkipRef.current = canSkip;
+        prevCountdownRef.current = countdown;
+        setAdOverlay({ canSkip, countdown, endTime: cueEnd });
+      }
+    };
+
+    p.on("timeupdate", onTimeUpdateAd);
+
     let resumePos: number | null = null;
     if (authed && id) {
       api<{ positionSec: number; completedAt: string | null }>(
@@ -299,12 +377,17 @@ export function PlayerPage() {
       try {
         p.off("loadedmetadata", onLoadedMeta);
         p.off("ended", onEnded);
+        p.off("timeupdate", onTimeUpdateAd);
       } catch {
         /* ignore */
       }
       p.dispose();
       player.current = null;
       seekedOnce.current = false;
+      prevInAdRef.current = false;
+      prevCountdownRef.current = -1;
+      prevCanSkipRef.current = null;
+      setAdOverlay(null);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [video?.status]);
@@ -339,11 +422,39 @@ export function PlayerPage() {
       <div className="player-page" style={{ marginTop: 16 }}>
         <div className="player-wrap">
           {video?.status === "READY" ? (
-            <video
-              ref={videoEl}
-              className="video-js vjs-big-play-centered"
-              playsInline
-            />
+            <>
+              <video
+                ref={videoEl}
+                className="video-js vjs-big-play-centered"
+                playsInline
+              />
+              {/* Ad skip overlay — only rendered for skippable ads */}
+              {adOverlay && (
+                <div className="ad-skip-overlay">
+                  {!adOverlay.canSkip ? (
+                    <div className="ad-skip-btn ad-skip-pending">
+                      Skip in {adOverlay.countdown}s
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      className="ad-skip-btn ad-skip-ready"
+                      onClick={() => {
+                        if (player.current) {
+                          try {
+                            player.current.currentTime(adOverlay.endTime);
+                          } catch {
+                            /* ignore seek errors */
+                          }
+                        }
+                      }}
+                    >
+                      Skip Ad ›
+                    </button>
+                  )}
+                </div>
+              )}
+            </>
           ) : (
             <div
               style={{

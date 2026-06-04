@@ -102,20 +102,31 @@ function buildAdBlock(params: {
   token: string;
   rendition: string;
   sessionId: string;
+  /**
+   * Cumulative media time (content + prior ads) at the start of this ad break,
+   * in seconds. Used to anchor the EXT-X-DATERANGE cue to the correct position
+   * in the media timeline so the player can show the skip button at the right moment.
+   */
+  breakOffsetSec: number;
 }): string[] {
-  const { adBreak, segments, baseUrl, token, rendition, sessionId } = params;
+  const { adBreak, segments, baseUrl, token, rendition, sessionId, breakOffsetSec } = params;
   if (segments.length === 0) return [];
 
   const lines: string[] = [];
   lines.push(`#EXT-X-CUE-OUT:${adBreak.durationSec}`);
   lines.push("#EXT-X-DISCONTINUITY");
 
-  // Optional skip-after tag so the player can show a "Skip Ad" button
+  // Optional skip-after tag so the player can show a "Skip Ad" button.
+  // START-DATE is expressed as epoch + breakOffsetSec so that VHS can map it to
+  // the correct media-timeline position (requires EXT-X-PROGRAM-DATE-TIME:epoch
+  // to be present earlier in the playlist — injected by stitchVariantPlaylist).
   if (adBreak.skipOffsetSec !== undefined) {
+    // epoch 0 + breakOffsetSec = exact media-timeline position of this ad break
+    const startDate = new Date(Math.round(breakOffsetSec * 1000)).toISOString();
     lines.push(
-      `#EXT-X-DATERANGE:ID="ad-${adBreak.creativeId.slice(0, 8)}",` +
-        `CLASS="interstitial",` +
-        `START-DATE="${new Date().toISOString()}",` +
+      `#EXT-X-DATERANGE:ID="ad-skip-${adBreak.creativeId.slice(0, 8)}",` +
+        `CLASS="com.apple.hls.interstitial",` +
+        `START-DATE="${startDate}",` +
         `DURATION=${adBreak.durationSec},` +
         `X-SKIP-OFFSET=${adBreak.skipOffsetSec}`
     );
@@ -166,16 +177,32 @@ async function stitchVariantPlaylist(params: {
     })
   );
 
+  // Does any break have a skip offset? If so we need the PROGRAM-DATE-TIME anchor.
+  const hasSkippable = adBreaks.some((b) => b.skipOffsetSec !== undefined);
+
   const lines = content.split("\n");
   const out: string[] = [];
-  let cumSec = 0;
+  let cumSec = 0;      // content-only elapsed time — used to trigger mid-roll breaks
+  let mediaTimeSec = 0; // full media timeline (content + all prior ad durations)
   let firstSegSeen = false;
   let remaining = [...adBreaks];
 
+  // insertBreak reads `mediaTimeSec` from the outer scope and advances it.
   const insertBreak = (b: AdBreakEntry) => {
     const segs = segMap.get(b.creativeId) ?? [];
-    const block = buildAdBlock({ adBreak: b, segments: segs, baseUrl, token, rendition, sessionId });
+    const block = buildAdBlock({
+      adBreak: b,
+      segments: segs,
+      baseUrl,
+      token,
+      rendition,
+      sessionId,
+      breakOffsetSec: mediaTimeSec
+    });
     out.push(...block);
+    // Advance the media timeline by the ad's nominal duration so subsequent
+    // break offsets are relative to the correct point in the stitched stream.
+    mediaTimeSec += b.durationSec;
   };
 
   for (let i = 0; i < lines.length; i++) {
@@ -204,6 +231,14 @@ async function stitchVariantPlaylist(params: {
       // PRE-ROLL: insert before the first segment only
       if (!firstSegSeen) {
         firstSegSeen = true;
+
+        // Inject an epoch-0 PROGRAM-DATE-TIME so VHS can map EXT-X-DATERANGE
+        // START-DATEs (which we encode as epoch + breakOffsetSec) to the correct
+        // media-timeline positions for skip cue detection.
+        if (hasSkippable) {
+          out.push("#EXT-X-PROGRAM-DATE-TIME:1970-01-01T00:00:00.000Z");
+        }
+
         const pre = remaining.filter((b) => b.offsetSec === 0);
         remaining = remaining.filter((b) => b.offsetSec !== 0);
         for (const b of pre) insertBreak(b);
@@ -222,6 +257,7 @@ async function stitchVariantPlaylist(params: {
       }
 
       cumSec += segDuration;
+      mediaTimeSec += segDuration;
 
       // MID-ROLL: fire breaks whose offset has been reached
       const due = remaining.filter(
