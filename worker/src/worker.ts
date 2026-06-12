@@ -172,6 +172,12 @@ const adWorker = new Worker<AdTranscodeJob>(
   async (job) => {
     const { creativeId, bucket, inputKey } = job.data;
 
+    const exists = await prisma.adCreative.findUnique({ where: { id: creativeId }, select: { id: true } });
+    if (!exists) {
+      console.warn(`[ad-worker] creative ${creativeId} not found in DB — job discarded`);
+      return;
+    }
+
     await prisma.adCreative.update({
       where: { id: creativeId },
       data: { status: "PROCESSING", error: null }
@@ -226,7 +232,7 @@ const adWorker = new Worker<AdTranscodeJob>(
       console.log(`[ad-worker] creative ${creativeId} transcoded successfully`);
     } catch (err) {
       const message = err instanceof Error ? err.message : "Unknown error";
-      await prisma.adCreative.update({
+      await prisma.adCreative.updateMany({
         where: { id: creativeId },
         data: { status: "FAILED", error: message }
       });
